@@ -17,6 +17,7 @@ using OpenProtocolInterpreter.PowerMACS;
 using OpenProtocolInterpreter.Result;
 using OpenProtocolInterpreter.Statistic;
 using OpenProtocolInterpreter.Tightening;
+using OpenProtocolInterpreter.TighteningResults;
 using OpenProtocolInterpreter.Time;
 using OpenProtocolInterpreter.Tool;
 using OpenProtocolInterpreter.UserInterface;
@@ -61,6 +62,7 @@ namespace OpenProtocolInterpreter
                 .UseResultMessages(mode)
                 .UseStatisticMessages(mode)
                 .UseTighteningMessages(mode)
+                .UseTighteningResultsMessages(mode)
                 .UseTimeMessages(mode)
                 .UseToolMessages(mode)
                 .UseUserInterfaceMessages(mode)
@@ -98,6 +100,7 @@ namespace OpenProtocolInterpreter
                 .UseResultMessages(mids.Where(x => DoesImplementInterface(x, typeof(IResult))))
                 .UseStatisticMessages(mids.Where(x => DoesImplementInterface(x, typeof(IStatistic))))
                 .UseTighteningMessages(mids.Where(x => DoesImplementInterface(x, typeof(ITightening))))
+                .UseTighteningResultsMessages(mids.Where(x=>DoesImplementInterface(x,typeof(ITighteningResults))))
                 .UseTimeMessages(mids.Where(x => DoesImplementInterface(x, typeof(ITime))))
                 .UseToolMessages(mids.Where(x => DoesImplementInterface(x, typeof(ITool))))
                 .UseUserInterfaceMessages(mids.Where(x => DoesImplementInterface(x, typeof(IUserInterface))))
@@ -843,6 +846,27 @@ namespace OpenProtocolInterpreter
             return midInterpreter;
         }
 
+
+
+        public static MidInterpreter UseTighteningResultsMessages(this MidInterpreter midInterpreter, InterpreterMode mode = InterpreterMode.Both)
+        {
+            midInterpreter.UseTemplate<TighteningResultMessages>(mode);
+            return midInterpreter;
+        }
+        public static MidInterpreter UseTighteningResultsMessages(this MidInterpreter midInterpreter, IEnumerable<Type> mids)
+        {
+            ThrowIfInvalid<ITighteningResults>(mids);
+            midInterpreter.UseTemplate<TighteningResultMessages>(mids);
+            return midInterpreter;
+        }
+
+        public static MidInterpreter UseTighteningResultsMessages(this MidInterpreter midInterpreter, IDictionary<int, Type> mids)
+        {
+            ThrowIfInvalid<ITighteningResults>(mids);
+            midInterpreter.UseTemplate<TighteningResultMessages>(mids);
+            return midInterpreter;
+        }
+
         /// <summary>
         /// Include <see cref="ITime"/> MIDs into interpreter
         /// </summary>
@@ -994,6 +1018,8 @@ namespace OpenProtocolInterpreter
             midInterpreter.UseTemplate<Vin.VinMessages>(mids);
             return midInterpreter;
         }
+
+     
 
         private static bool IsValid(IEnumerable<Type> mids, Type desiredInterface)
         {

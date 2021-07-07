@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using OpenProtocolInterpreter.Converters;
 
 namespace OpenProtocolInterpreter
 {
@@ -57,5 +58,13 @@ namespace OpenProtocolInterpreter
                 new DataType(52, "IA", 0)
             });
         }
+    }
+
+    public static class DataTypeExtension
+    {
+        //public static IValueConverter GetConverter(this DataType dataType)
+        //{
+        //    return +
+        //}
     }
 }
