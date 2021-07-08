@@ -84,11 +84,13 @@ namespace OpenProtocolInterpreter.TighteningResults
             // Parse the 20 byte header
             HeaderData = ProcessHeader(asciiMessage);
 
+            var endIndex = 51;
             var numberOfPidDataFields = GetField(1, (int)DataFields.NUMBER_OF_PID_DATA_FIELDS);
+            endIndex += numberOfPidDataFields.Size;
+
             var numPids = _intConverter.Convert(GetValue(numberOfPidDataFields, asciiMessage));
 
 
-            var endIndex = 0;
             if (numPids > 0)
             {
                 var dataFieldListField = GetField(1, (int)DataFields.PID_DATA);
@@ -112,6 +114,7 @@ namespace OpenProtocolInterpreter.TighteningResults
             endIndex += unitField.Size;
 
             var numberofParameters = GetField(1, (int)DataFields.NUMBER_OF_PARAMETER_DATA_FIELDS);
+            numberofParameters.Index = endIndex;
             endIndex += numberofParameters.Size;
                
             var numParameters = _intConverter.Convert(GetValue(numberofParameters, asciiMessage));
@@ -121,8 +124,9 @@ namespace OpenProtocolInterpreter.TighteningResults
                 var parameterListField = GetField(1, (int)DataFields.PARAMETER_DATA);
                 parameterListField.Index = endIndex;
 
-                var fieldLen = _intConverter.Convert(asciiMessage.Substring(parameterListField.Index + 5, 3));
+                var fieldLen = _intConverter.Convert(asciiMessage.Substring(parameterListField.Index + 5, 3)) + 17;
                 endIndex += numParameters * fieldLen;
+                parameterListField.Size = numParameters * fieldLen;
 
                 ParameterDatas = _variableDataFieldListConverter.Convert(GetValue(parameterListField, asciiMessage)).ToList();
             }
@@ -137,10 +141,11 @@ namespace OpenProtocolInterpreter.TighteningResults
                 var resolutionListFiled = GetField(1, (int)DataFields.RESOLUTION_DATA);
                 resolutionListFiled.Index = endIndex;
 
-                var fieldLen = _intConverter.Convert(asciiMessage.Substring(resolutionListFiled.Index + 10, 3));
+                var fieldLen = _intConverter.Convert(asciiMessage.Substring(resolutionListFiled.Index + 10, 3)) + 18;
                 endIndex += numParameters * fieldLen;
+                resolutionListFiled.Size = numParameters * fieldLen;
 
-                _resolusionConverter.Convert(GetValue(resolutionListFiled, asciiMessage));
+                ResolutionDatas = _resolusionConverter.Convert(GetValue(resolutionListFiled, asciiMessage)).ToList();
             }
 
             var numberofTraceSampleField = GetField(1, (int)DataFields.NUMBER_OF_TRACE_SAMPLES);
@@ -274,31 +279,6 @@ namespace OpenProtocolInterpreter.TighteningResults
             NUL_CHAR = 12,
             TRACE_SAMPLE = 13,
         }
-
-        public static List<VariableDataField> GetDataFieldsByFieldCount(string value, int fieldCount, out int endLength)
-        {
-            var list = new List<VariableDataField>();
-            int length = 0;
-            endLength = length;
-            for (int i = 0, j = 0; i < fieldCount; i++, j += 17 + length)
-            {
-
-                length = Convert.ToInt32(value.Substring(j + 5, 3));
-                var vdf = new VariableDataField();
-                vdf.ParameterId = Convert.ToInt32(value.Substring(j, 5));
-                vdf.Length = length;
-                vdf.DataType = Convert.ToInt32(value.Substring(j + 8, 2));
-                vdf.Unit = Convert.ToInt32(value.Substring(j + 10, 3));
-                vdf.StepNumber = Convert.ToInt32(value.Substring(j + 13, 4));
-                vdf.RealValue = value.Substring(j + 17, length);
-
-                list.Add(vdf);
-                endLength += 17 + length;
-            }
-            return list;
-        }
-
-
 
     }
 }

@@ -60,9 +60,8 @@ namespace OpenProtocolInterpreter.Converters
 
         public override IEnumerable<ResolutionField> Convert(string value)
         {
-            var list = new List<ResolutionField>();
             int length = 0;
-            for (int i = 0, j = 0; i < value.Length; i++, j += 18 + length)
+            for (int j = 0; j < value.Length; j += 18 + length)
             {
                 length = _intConverter.Convert(value.Substring(j + 10, 3));
                 var rf = new ResolutionField();
@@ -71,7 +70,6 @@ namespace OpenProtocolInterpreter.Converters
                 rf.Length = length;
                 rf.DataType = _intConverter.Convert(value.Substring(j + 13, 2));
                 rf.Unit = _intConverter.Convert(value.Substring(j + 15, 3));
-
                 rf.TimeValue = double.Parse(value.Substring(j + 18, length));
 
                 yield return rf;
