@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using OpenProtocolInterpreter.Converters;
 using OpenProtocolInterpreter.Result;
 using System.Linq;
+using System.Text;
 
 namespace OpenProtocolInterpreter.TighteningResults
 {
@@ -23,7 +24,6 @@ namespace OpenProtocolInterpreter.TighteningResults
             _dateConverter = new DateConverter();
             _variableDataFieldListConverter = new VariableDataFieldListConverter(_intConverter);
             _resolusionConverter = new ResolusionConverter(_intConverter);
-
 
             PidDatas = new List<VariableDataField>();
             ParameterDatas = new List<VariableDataField>();
@@ -57,15 +57,158 @@ namespace OpenProtocolInterpreter.TighteningResults
             };
         }
 
-        
-
-
         public override string Pack()
         {
-            return base.Pack();
+            NumberOfPIDDataFields = PidDatas.Count;
+            var pidSize = 0;
+            foreach (var item in PidDatas)
+            {
+                pidSize = pidSize + item.Length + 17;
+            }
+
+            NumberOfParameterDataFields = ParameterDatas.Count;
+            var parameterSize = 0;
+            foreach (var item in ParameterDatas)
+            {
+                parameterSize = parameterSize + item.Length + 17;
+            }
+
+            NumberOfResolutionFields = ResolutionDatas.Count;
+            var resolutionSize = 0;
+            foreach (var item in ResolutionDatas)
+            {
+                resolutionSize = resolutionSize + item.Length + 18;
+            }
+
+            NumberOfTraceSamples = RawTraceSamples.Length;
+            var endIndex = 49;
+
+            var pidFields = GetField(1, (int)DataFields.PID_DATA);
+            pidFields.Index = endIndex;
+            pidFields.Size = pidSize;
+            pidFields.SetValue(_variableDataFieldListConverter.Convert(PidDatas));
+
+            endIndex += pidFields.Size;
+
+            var traceTypeFields = GetField(1, (int)DataFields.TRACE_TYPE);
+            traceTypeFields.Index = endIndex;
+            endIndex += traceTypeFields.Size;
+
+            var transducerType = GetField(1, (int)DataFields.TRANSDUCER_TYPE);
+            transducerType.Index = endIndex;
+            endIndex += transducerType.Size;
+
+            var unit = GetField(1, (int)DataFields.Unit);
+            unit.Index = endIndex;
+            endIndex += unit.Size;
+
+
+            var parameterField = GetField(1, (int)DataFields.PARAMETER_DATA);
+            parameterField.Index += endIndex;
+            parameterField.Size = parameterSize;
+            parameterField.SetValue(_variableDataFieldListConverter.Convert(ParameterDatas));
+            endIndex += parameterSize;
+
+
+            var resolusionField = GetField(1, (int)DataFields.RESOLUTION_DATA);
+            resolusionField.Index = endIndex;
+            resolusionField.Size = resolutionSize;
+            resolusionField.SetValue(_resolusionConverter.Convert(ResolutionDatas));
+            endIndex += resolutionSize;
+
+            var traceSample = GetField(1, (int)DataFields.NUMBER_OF_TRACE_SAMPLES);
+            traceSample.Index = endIndex;
+            endIndex += traceSample.Size;
+
+            var nul = GetField(1, (int)DataFields.NUL_CHAR);
+            nul.Index = endIndex;
+            endIndex += nul.Size;
+
+
+
+            ConvertToBinary();
+
+
+            var traceField = GetField(1, (int)DataFields.TRACE_SAMPLE);
+            traceField.Index = endIndex;
+            if (BinaryTraceSamples != null)
+            {
+                traceField.Size = BinaryTraceSamples.Length;
+            }
+
+            if (!RevisionsByFields.Any())
+                return BuildHeader();
+
+            StringBuilder package = new StringBuilder();
+            package.Append(BuildHeader());
+
+            int prefixIndex = 1;
+            for (int i = 1; i <= (HeaderData.Revision > 0 ? HeaderData.Revision : 1); i++)
+                package.Append(Pack(RevisionsByFields[i], ref prefixIndex));
+
+            return package.ToString();
         }
 
+
         public override Mid Parse(byte[] package)
+        {
+            var asciiLength = GetAsciiLength(package);
+            var asciiMessage = System.Text.Encoding.ASCII.GetString(package, 0, asciiLength);
+
+            // Parse the 20 byte header
+            HeaderData = ProcessHeader(asciiMessage);
+
+            var endIndex = 49;
+            ProcessAsciiData(endIndex, asciiMessage);
+
+
+            ProcessDataFields(asciiMessage);
+            // END OF ASCII DATA. 
+
+            // Get Coeffiecient
+            GetCoefficient();
+            // START OF BINARY DATA
+
+            // Store the raw binary data
+            BinaryTraceSamples = new byte[package.Length - asciiLength];
+            Array.Copy(package, asciiLength, BinaryTraceSamples, 0, package.Length - asciiLength);
+
+            // Convert raw binary into 2 byte trace samples
+            ProcessBinaryData(BinaryTraceSamples);
+
+            return this;
+        }
+
+        public override Mid Parse(string package)
+        {
+            var asciiLength = GetAsciiLength(package);
+
+            //前半部分
+            var asciiMessage = package.Substring(0, asciiLength); //(package, 0, asciiLength);
+
+            // Parse the 20 byte header
+            HeaderData = ProcessHeader(asciiMessage);
+
+            int endIndex = 49;
+            ProcessAsciiData(endIndex, asciiMessage);
+
+            ProcessDataFields(asciiMessage);
+            // END OF ASCII DATA. 
+
+            // Get Coeffiecient
+            GetCoefficient();
+            // START OF BINARY DATA
+
+            // Store the raw binary data
+            BinaryTraceSamples = ToBytes(package.Substring(asciiLength, package.Length - asciiLength));
+
+            // Convert raw binary into 2 byte trace samples
+            ProcessBinaryData(BinaryTraceSamples);
+
+            return this;
+        }
+
+        private int GetAsciiLength(dynamic package)
         {
             var asciiLength = 0;
             for (int i = 0; i < package.Length; i++)
@@ -78,13 +221,12 @@ namespace OpenProtocolInterpreter.TighteningResults
                 }
             }
 
-            //前半部分
-            var asciiMessage = System.Text.Encoding.ASCII.GetString(package, 0, asciiLength);
+            return asciiLength;
+        }
 
-            // Parse the 20 byte header
-            HeaderData = ProcessHeader(asciiMessage);
-
-            var endIndex = 51;
+        private void ProcessAsciiData(int index, string asciiMessage)
+        {
+            var endIndex = index;
             var numberOfPidDataFields = GetField(1, (int)DataFields.NUMBER_OF_PID_DATA_FIELDS);
             endIndex += numberOfPidDataFields.Size;
 
@@ -104,10 +246,14 @@ namespace OpenProtocolInterpreter.TighteningResults
                 PidDatas = _variableDataFieldListConverter.Convert(GetValue(dataFieldListField, asciiMessage)).ToList();
             }
 
-            var traceTypeField = GetField(1,(int)DataFields.TRACE_TYPE);
+            var traceTypeField = GetField(1, (int)DataFields.TRACE_TYPE);
             traceTypeField.Index = endIndex;
-
             endIndex += traceTypeField.Size;
+
+
+            var transducerField = GetField(1, (int)DataFields.TRANSDUCER_TYPE);
+            transducerField.Index = endIndex;
+            endIndex += transducerField.Size;
 
             var unitField = GetField(1, (int)DataFields.Unit);
             unitField.Index = endIndex;
@@ -116,9 +262,9 @@ namespace OpenProtocolInterpreter.TighteningResults
             var numberofParameters = GetField(1, (int)DataFields.NUMBER_OF_PARAMETER_DATA_FIELDS);
             numberofParameters.Index = endIndex;
             endIndex += numberofParameters.Size;
-               
+
             var numParameters = _intConverter.Convert(GetValue(numberofParameters, asciiMessage));
-        
+
             if (numParameters > 0)
             {
                 var parameterListField = GetField(1, (int)DataFields.PARAMETER_DATA);
@@ -156,28 +302,53 @@ namespace OpenProtocolInterpreter.TighteningResults
             var nulCharacterField = GetField(1, (int)DataFields.NUL_CHAR);
             nulCharacterField.Index = endIndex;
             endIndex += nulCharacterField.Size;
+        }
 
-
-            ProcessDataFields(asciiMessage);
-            // END OF ASCII DATA. 
-
-            // START OF BINARY DATA
-
-            // Store the raw binary data
-            RawTraceSamples = new byte[package.Length - asciiLength];
-            Array.Copy(package, asciiLength, RawTraceSamples, 0, package.Length - asciiLength);
-
-            // Convert raw binary into 2 byte trace samples
-            TraceSamples = new float[RawTraceSamples.Length / 2];
-            for (int i = 0, j = 0; j < TraceSamples.Length; i += 2, j++)
+        private void ProcessBinaryData(byte[] traceDatas)
+        {
+            RawTraceSamples = new int[traceDatas.Length / 2];
+            for (int i = 0, j = 0; j < RawTraceSamples.Length; i += 2, j++)
             {
-                TraceSamples[j] = ((short)RawTraceSamples[i] << 8 | (ushort)RawTraceSamples[i + 1]);
+                RawTraceSamples[j] = (traceDatas[i] << 8 | traceDatas[i + 1]);
             }
-
-            return this;
         }
 
 
+        private void ConvertToBinary()
+        {
+            if (RawTraceSamples == null)
+            {
+                return;
+            }
+
+            BinaryTraceSamples = new byte[RawTraceSamples.Length * 2];
+            var index = 0;
+            for (int i = 0; i < RawTraceSamples.Length; i++)
+            {
+                BinaryTraceSamples[index++] = (byte)(RawTraceSamples[i] >> 8);
+                BinaryTraceSamples[index++] = (byte)RawTraceSamples[i];
+            }
+        }
+
+
+
+        private void GetCoefficient()
+        {
+            var coefficientPID = ParameterDatas.Where(field => field.ParameterId == 02213 || field.ParameterId == 02214).FirstOrDefault();
+            if (coefficientPID == null)
+            {
+                return;
+            }
+
+            if (!Double.TryParse(coefficientPID.RealValue, out double coeff))
+                throw new Exception("Coefficient not found!");
+
+            if (!Enum.TryParse(coefficientPID.ParameterId.ToString(), out CoefficientOperation op))
+                throw new Exception("Coefficient operation type not found!");
+
+            Coefficient = coeff;
+            OperationType = op;
+        }
 
         public int ResultDataIdentifier
         {
@@ -203,7 +374,6 @@ namespace OpenProtocolInterpreter.TighteningResults
         }
 
         public List<VariableDataField> PidDatas { get; set; }
-
         public List<VariableDataField> ParameterDatas { get; set; }
 
         public List<ResolutionField> ResolutionDatas { get; set; }
@@ -247,19 +417,20 @@ namespace OpenProtocolInterpreter.TighteningResults
         public double Coefficient { get; private set; }
 
 
-        public byte[] RawTraceSamples { get; set; }
+        public byte[] BinaryTraceSamples { get; private set; }
 
-        public float[] TraceSamples { get; set; }
+        public float[] TraceSamples { get; private set; }
+
+        public int[] RawTraceSamples { get; set; }
 
         public CoefficientOperation OperationType { get; private set; }
 
         public enum CoefficientOperation
         {
+            NONE = 0,
             DIVISION = 02213,
             MULTIPLICATION = 02214
         }
-
-      
 
         public enum DataFields
         {
@@ -279,6 +450,5 @@ namespace OpenProtocolInterpreter.TighteningResults
             NUL_CHAR = 12,
             TRACE_SAMPLE = 13,
         }
-
     }
 }

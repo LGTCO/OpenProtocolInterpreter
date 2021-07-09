@@ -83,8 +83,9 @@ namespace OpenProtocolInterpreter.Converters
             foreach (var v in value)
             {
                 pack += _intConverter.Convert('0', 5, DataField.PaddingOrientations.LEFT_PADDED, v.FirstIndex);
-                pack += _intConverter.Convert('0', 3, DataField.PaddingOrientations.LEFT_PADDED, v.LastIndex);
-                pack += _intConverter.Convert('0', 2, DataField.PaddingOrientations.LEFT_PADDED, v.Length);
+                pack += _intConverter.Convert('0', 5, DataField.PaddingOrientations.LEFT_PADDED, v.LastIndex);
+                pack += _intConverter.Convert('0', 3, DataField.PaddingOrientations.LEFT_PADDED, v.Length);
+                pack += _intConverter.Convert('0', 2, DataField.PaddingOrientations.LEFT_PADDED, v.DataType);
                 pack += _intConverter.Convert('0', 3, DataField.PaddingOrientations.LEFT_PADDED, v.Unit);
                 //pack += _intConverter.Convert('0', v.Length, DataField.PaddingOrientations.LEFT_PADDED, v.TimeValue);
                 pack += v.TimeValue.ToString().PadLeft(v.Length, '0');
